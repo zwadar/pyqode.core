@@ -66,7 +66,7 @@ class CodeCompletionWorker(object):
 
         """
 
-        def complete(self, code, line, column, path, encoding, prefix):
+        def complete(self, code, line, column, path, encoding, prefix, abs_pos):
             """
             Returns a list of completions.
 
@@ -83,6 +83,7 @@ class CodeCompletionWorker(object):
             :param path: file path
             :param encoding: file encoding
             :param prefix: completion prefix (text before cursor)
+            :param abs_pos: alternativelly this parameter grants acces to absolute cursor position (0 base)
 
             :returns: A list of completion dicts as described above.
             :rtype: list
@@ -101,11 +102,12 @@ class CodeCompletionWorker(object):
         encoding = data['encoding']
         prefix = data['prefix']
         req_id = data['request_id']
+        abs_pos = data['abs_pos']
         completions = []
         for prov in CodeCompletionWorker.providers:
             try:
                 results = prov.complete(
-                    code, line, column, path, encoding, prefix)
+                    code, line, column, path, encoding, prefix, abs_pos)
                 completions.append(results)
                 if len(completions):
                     break

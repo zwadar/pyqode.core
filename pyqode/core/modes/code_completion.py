@@ -282,7 +282,7 @@ class CodeCompletionMode(Mode, QtCore.QObject):
             self._completer = QtWidgets.QCompleter([''], self.editor)
         else:
             self._completer = SubsequenceCompleter(self.editor)
-        self._completer.setCompletionMode(self._completer.PopupCompletion)
+        self._completer.setCompletionMode(self._completer.UnfilteredPopupCompletion)
         if self.case_sensitive:
             self._completer.setCaseSensitivity(QtCore.Qt.CaseSensitive)
         else:
@@ -476,7 +476,8 @@ class CodeCompletionMode(Mode, QtCore.QObject):
                 'path': self.editor.file.path,
                 'encoding': self.editor.file.encoding,
                 'prefix': self.completion_prefix,
-                'request_id': self._request_id
+                'request_id': self._request_id,
+                'abs_pos' : self._helper.cursor_absolute_poition()
             }
             try:
                 self.editor.backend.send_request(

@@ -233,6 +233,15 @@ class TextHelper(object):
         text_cursor = self.word_under_cursor(True, text_cursor)
         return text_cursor
 
+    def cursor_absolute_poition(self):
+        """
+        Returns the QTextCursor absolution position. 
+
+        :return: Cursor position as integer
+        """
+        return self._editor.textCursor().position()
+
+
     def cursor_position(self):
         """
         Returns the QTextCursor position. The position is a tuple made up of
