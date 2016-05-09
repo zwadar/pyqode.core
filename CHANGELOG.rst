@@ -1,6 +1,77 @@
 Change Log
 ==========
 
+2.9.0
+-----
+
+New features:
+
+- add ability to extract translatable strings with gettext
+- add an option to disable copy of whole line when there is no selection, see PR #158
+- add a public method to retrieve the list of submenu of the editor context menu
+- add ``keys`` and ``values`` methods to the mode and panel manager
+- FSTreeView: delay initialisation of tree view until widget is shown
+- Add zoom menu to the editor's context menu
+- Add ability to use own QSettings
+- Add ability to set custom linter rules and add an option for the backend to know about max_line_length (defined in
+  the margin mode).
+- Add ability to close tabs on the left/right of the current tab.
+
+Fixed bugs:
+
+- fix conflicts between WordClickMode and Ctrl+Mouse move (prevent goto when Ctrl+ mouse move).
+- fix text cursor not visible under a margin (solution is to use a 2px wide cursor).
+- fix HackEdit/hackedit#51
+- fix cut not working as intended when cutting a line with only whitespaces
+- fix memory issues in HtmlPreviewWidget, now using QTextEdit::setHtml instead of a full blown webview
+- fix subprocess.CalledError if xdg-mime returns with non-zero exit code
+- fix segfault on Windows (in HackEdit)
+- fix many potential unhandled OSError/subprocess errors
+- fix file_renamed signal not emitted for child file when a parent directory has been renamed (FSTreeView)
+- fix KeyError in backend client if backend function failed due to an exception (result is None)
+- fix UnicodeDecodeError when decoding stdout/stderr in InteractiveConsole
+- fix backend output not shown in logs when running from a frozen application
+- fix mode enabled on install even if enabled was set to False in the constructor
+- fix extra selection spanning over multiple lines when user inserts a line breaks (CheckerMode)
+- restore case insensitive code completion by default which was causing some major issues in OpenCobolIDE
+- fix ImportError when looking for a pygments lexer (and the application has been freezed without all possible
+  pygments lexers)
+
+
+2.8.0
+-----
+
+New features:
+
+- new pyqode package: pyqode.rst (ReStructuredText)
+- enable case sensitive code completion by default
+- add a new widget: HtmlPreviewWidget. This widget display the preview of an
+  editor that implement the ``to_html`` method. (use for the new pyqode
+  package: pyqode.rst)
+- enable code completion in strings (it's up to the cc engine to treat them
+  differently)
+- SplittableCodeEditTabWidget: add a way to repen recently closed tabs
+- CI improvements: tests are now running with both PyQt4 and PyQt5 on Travis CI
+
+Fixed bugs:
+
+- fix PYGMENTS_STYLES not including our own styles if pyqode not in standard path (OCIDE now bundles pyqode)
+- fix wrong modifiers used for indent/unindent: Ctrl+Tab and Ctrl+Shift+Tab can
+  now be used to cycle through the tabs of a QTabWidget
+- fix AttributeError in FSTreeView: msg box does not have an error method,
+  use critical instead
+- fix unable to create directories/files that starts with '.' in FSTreeView (hidden on linux)
+- fix AttributeError in splittable tab widget if editor widget is not a CodeEdit
+- fix AttributeError: 'NoneType' object has no attribute 'state' in InteractiveConsole
+- fix some segmentation faults when using PyQt4
+- fix highlighting not working in split editor if original editor has been
+  closed.
+- fix a memory leak in the backend manager
+- fix unreadable search occurences if foreground color is white (dark themes)
+- fix wrong tag color in QtStyle pygments style
+- fix AttributeError: 'NoneType' object has no attribute '_port' in BackendManager
+
+
 2.7.0
 -----
 

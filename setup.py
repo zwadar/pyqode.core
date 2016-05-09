@@ -4,6 +4,7 @@
 Setup script for pyqode.core
 """
 from setuptools import setup, find_packages
+from setuptools.command.test import test as TestCommand
 from pyqode.core import __version__
 
 #
@@ -19,6 +20,32 @@ try:
     cmdclass = {'build_ui': build_ui}
 except ImportError:
     cmdclass = {}
+
+
+class PyTest(TestCommand):
+    user_options = [('pytest-args=', 'a', "Arguments to pass to py.test")]
+
+    def initialize_options(self):
+        TestCommand.initialize_options(self)
+        self.pytest_args = ""
+
+    def run_tests(self):
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+        # force the use of boxed mode (each test will run in an isolated
+        # process)
+        if self.pytest_args:
+            self.pytest_args = self.pytest_args.replace('"', '').split(' ')
+        else:
+            self.pytest_args = []
+        if '--boxed' not in self.pytest_args:
+            self.pytest_args.insert(0, '--boxed')
+        print('running test command: py.test "%s"' % ' '.join(
+            self.pytest_args))
+        errno = pytest.main(self.pytest_args)
+        sys.exit(errno)
+
+cmdclass['test'] = PyTest
 
 
 pygments_req = 'pygments'
@@ -49,6 +76,7 @@ setup(
     description=DESCRIPTION,
     long_description=readme(),
     install_requires=[pygments_req, 'pyqode.qt', 'future'],
+    tests_require=['pytest-xdist', 'pytest-cov', 'pytest-pep8', 'pytest'],
     entry_points={
         'console_scripts': [
             'pyqode-console = pyqode.core.tools.console:main'

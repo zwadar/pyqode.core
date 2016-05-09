@@ -423,10 +423,19 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
 
     @property
     def select_line_on_copy_empty(self):
+        """
+        :return: state of "whole line selecting" on copy with empty selection
+        :rtype: bool
+        """
         return self._select_line_on_copy_empty
-    
+
     @select_line_on_copy_empty.setter
     def select_line_on_copy_empty(self, value):
+        """
+        To turn on/off selecting the whole line when copy with empty selection is triggered
+
+        Default is True
+        """
         self._select_line_on_copy_empty = value
 
     def __init__(self, parent=None, create_default_actions=True):
@@ -474,6 +483,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             ':/fonts/rc/SourceCodePro-Bold.ttf')
         self._font_family = self._DEFAULT_FONT
         self._mimetypes = []
+        self._select_line_on_copy_empty = True
 
         # Flags/Working variables
         self._last_mouse_pos = QtCore.QPoint(0, 0)
@@ -507,9 +517,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         self.setMouseTracking(True)
         self.setCenterOnScroll(True)
         self.setLineWrapMode(self.NoWrap)
-
-    def __del__(self):
-        _logger().log(5, 'CodeEdit.__del__')
+        self.setCursorWidth(2)
 
     def __repr__(self):
         return '%s(path=%r)' % (self.__class__.__name__, self.file.path)
@@ -758,6 +766,12 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         for action in menu.actions():
             self.removeAction(action)
 
+    def menus(self):
+        """
+        Returns the list of sub context menus.
+        """
+        return self._menus
+
     @QtCore.Slot()
     def delete(self):
         """ Deletes the selected text """
@@ -878,11 +892,14 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         return False
 
     def cut(self):
+        """
+        Cuts the selected text or the whole line if no text was selected.
+        """
         tc = self.textCursor()
         helper = TextHelper(self)
         tc.beginEditBlock()
         no_selection = False
-        if not helper.current_line_text().strip():
+        if not helper.current_line_text():
             tc.deleteChar()
         else:
             if not self.textCursor().hasSelection():
@@ -895,6 +912,11 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         self.setTextCursor(tc)
 
     def copy(self):
+        """
+        Copy the selected text to the clipboard. If no text was selected, the
+        entire line is copied (this feature can be turned off by
+        setting :attr:`select_line_on_copy_empty` to False.
+        """
         if self.select_line_on_copy_empty and not self.textCursor().hasSelection():
             TextHelper(self).select_whole_line()
         super(CodeEdit, self).copy()
@@ -934,10 +956,12 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         self.key_pressed.emit(event)
         state = event.isAccepted()
         if not event.isAccepted():
-            if event.key() == QtCore.Qt.Key_Tab:
+            if event.key() == QtCore.Qt.Key_Tab and event.modifiers() == \
+                    QtCore.Qt.NoModifier:
                 self.indent()
                 event.accept()
-            elif event.key() == QtCore.Qt.Key_Backtab:
+            elif event.key() == QtCore.Qt.Key_Backtab and \
+                    event.modifiers() == QtCore.Qt.NoModifier:
                 self.un_indent()
                 event.accept()
             elif event.key() == QtCore.Qt.Key_Home and \
@@ -1121,14 +1145,14 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
 
     def _init_actions(self, create_standard_actions):
         """ Init context menu action """
-        menu_advanced = QtWidgets.QMenu('Advanced')
+        menu_advanced = QtWidgets.QMenu(_('Advanced'))
         self.add_menu(menu_advanced)
         self._sub_menus = {
             'Advanced': menu_advanced
         }
         if create_standard_actions:
             # Undo
-            action = QtWidgets.QAction('Undo', self)
+            action = QtWidgets.QAction(_('Undo'), self)
             action.setShortcut('Ctrl+Z')
             action.setIcon(icons.icon(
                 'edit-undo', ':/pyqode-icons/rc/edit-undo.png', 'fa.undo'))
@@ -1138,7 +1162,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.add_action(action, sub_menu=None)
             self.action_undo = action
             # Redo
-            action = QtWidgets.QAction('Redo', self)
+            action = QtWidgets.QAction(_('Redo'), self)
             action.setShortcut('Ctrl+Y')
             action.setIcon(icons.icon(
                 'edit-redo', ':/pyqode-icons/rc/edit-redo.png', 'fa.repeat'))
@@ -1148,7 +1172,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.add_action(action, sub_menu=None)
             self.action_redo = action
             # Copy
-            action = QtWidgets.QAction('Copy', self)
+            action = QtWidgets.QAction(_('Copy'), self)
             action.setShortcut(QtGui.QKeySequence.Copy)
             action.setIcon(icons.icon(
                 'edit-copy', ':/pyqode-icons/rc/edit-copy.png', 'fa.copy'))
@@ -1156,7 +1180,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.add_action(action, sub_menu=None)
             self.action_copy = action
             # cut
-            action = QtWidgets.QAction('Cut', self)
+            action = QtWidgets.QAction(_('Cut'), self)
             action.setShortcut(QtGui.QKeySequence.Cut)
             action.setIcon(icons.icon(
                 'edit-cut', ':/pyqode-icons/rc/edit-cut.png', 'fa.cut'))
@@ -1164,7 +1188,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.add_action(action, sub_menu=None)
             self.action_cut = action
             # paste
-            action = QtWidgets.QAction('Paste', self)
+            action = QtWidgets.QAction(_('Paste'), self)
             action.setShortcut(QtGui.QKeySequence.Paste)
             action.setIcon(icons.icon(
                 'edit-paste', ':/pyqode-icons/rc/edit-paste.png',
@@ -1173,13 +1197,13 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.add_action(action, sub_menu=None)
             self.action_paste = action
         # duplicate line
-        action = QtWidgets.QAction('Duplicate line', self)
+        action = QtWidgets.QAction(_('Duplicate line'), self)
         action.setShortcut('Ctrl+D')
         action.triggered.connect(self.duplicate_line)
         self.add_action(action, sub_menu=None)
         self.action_duplicate_line = action
         # select all
-        action = QtWidgets.QAction('Select all', self)
+        action = QtWidgets.QAction(_('Select all'), self)
         action.setShortcut(QtGui.QKeySequence.SelectAll)
         action.triggered.connect(self.selectAll)
         self.action_select_all = action
@@ -1187,7 +1211,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         self.add_separator(sub_menu=None)
         if create_standard_actions:
             # indent
-            action = QtWidgets.QAction('Indent', self)
+            action = QtWidgets.QAction(_('Indent'), self)
             action.setShortcut('Tab')
             action.setIcon(icons.icon(
                 'format-indent-more',
@@ -1196,7 +1220,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.add_action(action)
             self.action_indent = action
             # unindent
-            action = QtWidgets.QAction('Un-indent', self)
+            action = QtWidgets.QAction(_('Un-indent'), self)
             action.setShortcut('Shift+Tab')
             action.setIcon(icons.icon(
                 'format-indent-less',
@@ -1206,7 +1230,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             self.action_un_indent = action
             self.add_separator()
         # goto
-        action = QtWidgets.QAction('Go to line', self)
+        action = QtWidgets.QAction(_('Go to line'), self)
         action.setShortcut('Ctrl+G')
         action.setIcon(icons.icon(
             'go-jump', ':/pyqode-icons/rc/goto-line.png', 'fa.share'))

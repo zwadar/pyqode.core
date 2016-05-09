@@ -71,11 +71,11 @@ class InteractiveConsole(QTextEdit):
         self.setFont(QFont(font, 10))
         self.setReadOnly(True)
         self._mask_user_input = False
-        action = QAction('Copy', self)
+        action = QAction(_('Copy'), self)
         action.setShortcut(QKeySequence.Copy)
         action.triggered.connect(self.copy)
         self.add_action(action)
-        action = QAction('Paste', self)
+        action = QAction(_('Paste'), self)
         action.setShortcut(QKeySequence.Paste)
         action.triggered.connect(self.paste)
         self.add_action(action)
@@ -110,14 +110,23 @@ class InteractiveConsole(QTextEdit):
             self._writer = writer
 
     def _on_stdout(self):
-        raw = self.process.readAllStandardOutput()
-        txt = bytes(raw).decode(locale.getpreferredencoding())
+        raw = bytes(self.process.readAllStandardOutput())
+        try:
+            txt = raw.decode(sys.getfilesystemencoding())
+        except UnicodeDecodeError:
+            txt = str(raw).replace("b'", '')[:-1].replace(
+                '\\r\\n', '\n').replace('\\\\', '\\')
+        _logger().debug('stdout: %s', txt)
         self._writer(self, txt, self.stdout_color)
 
     def _on_stderr(self):
-        txt = bytes(self.process.readAllStandardError()).decode(
-            locale.getpreferredencoding())
-        _logger().debug('%s', txt)
+        raw = bytes(self.process.readAllStandardError())
+        try:
+            txt = raw.decode(sys.getfilesystemencoding())
+        except UnicodeDecodeError:
+            txt = str(raw).replace("b'", '')[:-1].replace(
+                '\\r\\n', '\n').replace('\\\\', '\\')
+        _logger().debug('stderr: %s', txt)
         self._writer(self, txt, self.stderr_color)
 
     @property
@@ -253,7 +262,7 @@ class InteractiveConsole(QTextEdit):
         self._mask_user_input = value
 
     def closeEvent(self, *args, **kwargs):
-        if self.process.state() == QProcess.Running:
+        if self.process and self.process.state() == QProcess.Running:
             self.process.terminate()
 
     def start_process(self, process, args=None, cwd=None, env=None):

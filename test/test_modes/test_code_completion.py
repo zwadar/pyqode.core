@@ -11,7 +11,7 @@ from pyqode.core.api import TextHelper
 from pyqode.core import modes
 from pyqode.core.modes.code_completion import SubsequenceCompleter
 from ..helpers import server_path, wait_for_connected
-from ..helpers import ensure_visible
+from ..helpers import ensure_visible, ensure_connected
 
 
 def get_mode(editor):
@@ -21,7 +21,7 @@ def get_mode(editor):
 code = '''"""
 Empty module
 """
-
+string = 'a string'
 '''
 
 
@@ -30,20 +30,6 @@ def ensure_empty(func):
     def wrapper(editor, *args, **kwds):
         editor.file._path = None
         editor.setPlainText(code, 'text/x-python', 'utf-8')
-        return func(editor, *args, **kwds)
-    return wrapper
-
-
-def ensure_connected(func):
-    """
-    Ensures the frontend is connect is connected to the server. If that is not
-    the case, the code completion server is started automatically
-    """
-    @functools.wraps(func)
-    def wrapper(editor, *args, **kwds):
-        if not editor.backend.running:
-            editor.backend.start(server_path())
-            wait_for_connected(editor)
         return func(editor, *args, **kwds)
     return wrapper
 
@@ -89,11 +75,11 @@ def test_request_completion(editor):
     # starts the server after the request to test the retry on NotConnected
     # mechanism
     TextHelper(editor).goto_line(0)
-    QTest.qWait(100)
+    QTest.qWait(2000)
     mode.request_completion()
     editor.backend.start(server_path())
-    QTest.qWait(500)
-
+    QTest.qWait(1000)
+    assert editor.backend.running is True
     # now this should work
     TextHelper(editor).goto_line(3)
     QTest.qWait(100)
@@ -104,21 +90,11 @@ def test_request_completion(editor):
 @ensure_empty
 @ensure_visible
 @ensure_connected
-def test_completion_in_string_or_comment(editor):
-    mode = get_mode(editor)
-    TextHelper(editor).goto_line(2, column=0)
-    QTest.qWait(100)
-    assert mode.request_completion() is False
-    QTest.qWait(1000)
-
-
-@ensure_empty
-@ensure_visible
-@ensure_connected
 def test_successive_requests(editor):
     mode = get_mode(editor)
     QTest.qWait(1000)
     TextHelper(editor).goto_line(3)
+    assert editor.backend.running
     # only the first request should be accepted
     ret1 = mode.request_completion()
     ret2 = mode.request_completion()

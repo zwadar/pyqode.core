@@ -10,11 +10,14 @@ import uuid
 import weakref
 
 from pyqode.qt import QtCore, QtWidgets, QtGui
-from pyqode.core.api import utils, CodeEdit
+from pyqode.core.api import utils
 from pyqode.core.dialogs import DlgUnsavedFiles
 from pyqode.core._forms import popup_open_files_ui
 from .tab_bar import TabBar
 from .code_edits import GenericCodeEdit, TextCodeEdit
+
+from pyqode.core._forms import pyqode_core_rc
+assert pyqode_core_rc
 
 
 def _logger():
@@ -97,7 +100,6 @@ class DraggableTabBar(TabBar):
         event.acceptProposedAction()
 
 
-
 class BaseTabWidget(QtWidgets.QTabWidget):
     """
     Base tab widget class used by SplittableTabWidget. This tab widget adds a
@@ -167,14 +169,44 @@ class BaseTabWidget(QtWidgets.QTabWidget):
         Closes every editors tabs except the current one.
         """
         current_widget = self.widget(self.tab_under_menu())
-        self._try_close_dirty_tabs(exept=current_widget)
-        i = 0
-        while self.count() > 1:
-            widget = self.widget(i)
-            if widget != current_widget:
-                self.remove_tab(i)
-            else:
-                i = 1
+        if self._try_close_dirty_tabs(exept=current_widget):
+            i = 0
+            while self.count() > 1:
+                widget = self.widget(i)
+                if widget != current_widget:
+                    self.remove_tab(i)
+                else:
+                    i = 1
+
+    @QtCore.Slot()
+    def close_left(self):
+        """
+        Closes every editors tabs on the left of the current one.
+        """
+        current_widget = self.widget(self.tab_under_menu())
+        index = self.indexOf(current_widget)
+        if self._try_close_dirty_tabs(tab_range=range(index)):
+            while True:
+                widget = self.widget(0)
+                if widget != current_widget:
+                    self.remove_tab(0)
+                else:
+                    break
+
+    @QtCore.Slot()
+    def close_right(self):
+        """
+        Closes every editors tabs on the left of the current one.
+        """
+        current_widget = self.widget(self.tab_under_menu())
+        index = self.indexOf(current_widget)
+        if self._try_close_dirty_tabs(tab_range=range(index + 1, self.count())):
+            while True:
+                widget = self.widget(self.count() - 1)
+                if widget != current_widget:
+                    self.remove_tab(self.count() - 1)
+                else:
+                    break
 
     @QtCore.Slot()
     def close_all(self):
@@ -268,11 +300,14 @@ class BaseTabWidget(QtWidgets.QTabWidget):
     def _create_tab_bar_menu(self):
         context_mnu = QtWidgets.QMenu()
         for name, slot, icon in [
-                ('Close', self.close, 'window-close'),
-                ('Close others', self.close_others, 'tab-close-other'),
-                ('Close all', self.close_all, 'project-development-close-all'),
+                (_('Close tab'), self.close, 'document-close'),
+                (_('Close tabs to the left'), self.close_left, 'tab-close-other'),
+                (_('Close tabs to the right'), self.close_right, 'tab-close-other'),
+                (_('Close others tabs'), self.close_others, 'tab-close-other'),
+                (_('Close all tabs'), self.close_all,
+                 'project-development-close-all'),
                 (None, None, None),
-                ('Detach tab', self.detach_tab, 'tab-detach')]:
+                (_('Detach tab'), self.detach_tab, 'tab-detach')]:
             if name is None and slot is None:
                 qaction = QtWidgets.QAction(self)
                 qaction.setSeparator(True)
@@ -281,15 +316,23 @@ class BaseTabWidget(QtWidgets.QTabWidget):
                 qaction.triggered.connect(slot)
                 if icon:
                     qaction.setIcon(QtGui.QIcon.fromTheme(icon))
+            if slot == self.close_left:
+                self.a_close_left = qaction
+            elif slot == self.close_right:
+                self.a_close_right = qaction
+            elif slot == self.close_others:
+                self.a_close_others = qaction
+            elif slot == self.close_all:
+                self.a_close_all = qaction
             context_mnu.addAction(qaction)
             self.addAction(qaction)
         context_mnu.addSeparator()
-        menu = QtWidgets.QMenu('Split', context_mnu)
+        menu = QtWidgets.QMenu(_('Split'), context_mnu)
         menu.setIcon(QtGui.QIcon.fromTheme('split'))
-        a = menu.addAction('Split horizontally')
+        a = menu.addAction(_('Split horizontally'))
         a.triggered.connect(self._on_split_requested)
         a.setIcon(QtGui.QIcon.fromTheme('view-split-left-right'))
-        a = menu.addAction('Split vertically')
+        a = menu.addAction(_('Split vertically'))
         a.setIcon(QtGui.QIcon.fromTheme('view-split-top-bottom'))
         a.triggered.connect(self._on_split_requested)
         context_mnu.addMenu(menu)
@@ -298,6 +341,12 @@ class BaseTabWidget(QtWidgets.QTabWidget):
             context_mnu.addSeparator()
         for action in self.context_actions:
             context_mnu.addAction(action)
+        tab = self.widget(self.tab_under_menu())
+        index = self.indexOf(tab)
+        self.a_close_right.setVisible(0 <= index < self.count() - 1)
+        self.a_close_left.setVisible(0 < index <= self.count() - 1)
+        self.a_close_others.setVisible(self.count() > 1)
+        self.a_close_all.setVisible(self.count() > 1)
         self._context_mnu = context_mnu
         return context_mnu
 
@@ -309,7 +358,7 @@ class BaseTabWidget(QtWidgets.QTabWidget):
             self._create_tab_bar_menu().popup(self.tabBar().mapToGlobal(
                 position))
 
-    def _collect_dirty_tabs(self, skip=None):
+    def _collect_dirty_tabs(self, skip=None, tab_range=None):
         """
         Collects the list of dirty tabs
 
@@ -317,22 +366,27 @@ class BaseTabWidget(QtWidgets.QTabWidget):
         """
         widgets = []
         filenames = []
-        for i in range(self.count()):
+        if tab_range is None:
+            tab_range = range(self.count())
+        for i in tab_range:
             widget = self.widget(i)
             try:
                 if widget.dirty and widget != skip:
                     widgets.append(widget)
-                    filenames.append(widget.file.path)
+                    if widget.file.path:
+                        filenames.append(widget.file.path)
+                    else:
+                        filenames.append(widget.documentTitle())
             except AttributeError:
                 pass
         return widgets, filenames
 
-    def _try_close_dirty_tabs(self, exept=None):
+    def _try_close_dirty_tabs(self, exept=None, tab_range=None):
         """
         Tries to close dirty tabs. Uses DlgUnsavedFiles to ask the user
         what he wants to do.
         """
-        widgets, filenames = self._collect_dirty_tabs(skip=exept)
+        widgets, filenames = self._collect_dirty_tabs(skip=exept, tab_range=tab_range)
         if not len(filenames):
             return True
         dlg = DlgUnsavedFiles(self, files=filenames)
@@ -342,7 +396,7 @@ class BaseTabWidget(QtWidgets.QTabWidget):
                     filename = item.text()
                     widget = None
                     for widget in widgets:
-                        if widget.path == filename:
+                        if widget.file.path == filename:
                             break
                     if widget != exept:
                         self.save_widget(widget)
@@ -352,7 +406,7 @@ class BaseTabWidget(QtWidgets.QTabWidget):
 
     def _get_widget_path(self, widget):
         try:
-            return widget.path
+            return widget.file.path
         except AttributeError:
             return ''
 
@@ -406,6 +460,11 @@ class BaseTabWidget(QtWidgets.QTabWidget):
         """
         if widget is None:
             return
+        try:
+            widget.document().setParent(None)
+            widget.syntax_highlighter.setParent(None)
+        except AttributeError:
+            pass  # not a QPlainTextEdit subclass
         # handled cloned widgets
         clones = []
         if hasattr(widget, 'original') and widget.original:
@@ -445,6 +504,10 @@ class BaseTabWidget(QtWidgets.QTabWidget):
         :param index: index of the tab to remove.
         """
         widget = self.widget(index)
+        try:
+            document = widget.document()
+        except AttributeError:
+            document = None  # not a QPlainTextEdit
         clones = self._close_widget(widget)
         self.tab_closed.emit(widget)
         self.removeTab(index)
@@ -455,10 +518,12 @@ class BaseTabWidget(QtWidgets.QTabWidget):
         if SplittableTabWidget.tab_under_menu == widget:
             SplittableTabWidget.tab_under_menu = None
         if not clones:
-            widget.close()
             widget.setParent(None)
-            widget.deleteLater()
-            del widget
+        else:
+            try:
+                clones[0].syntax_highlighter.setDocument(document)
+            except AttributeError:
+                pass  # not a QPlainTextEdit
 
     def _on_split_requested(self):
         """
@@ -518,14 +583,17 @@ class BaseTabWidget(QtWidgets.QTabWidget):
 class OpenFilesPopup(QtWidgets.QDialog):
     triggered = QtCore.Signal(str)
 
-    def __init__(self, *args):
-        super(OpenFilesPopup, self).__init__(*args)
+    def __init__(self, parent=None, qsettings=None):
+        super(OpenFilesPopup, self).__init__(parent)
         self.ui = popup_open_files_ui.Ui_Dialog()
         self.ui.setupUi(self)
         self.ui.tableWidget.itemActivated.connect(self._on_item_activated)
         self.ui.tableWidget.itemDoubleClicked.connect(self._on_item_activated)
-        settings = QtCore.QSettings('pyQode', 'pyqode.core')
-        self.sort_enabled = bool(settings.value(
+        if qsettings is None:
+            self.settings = QtCore.QSettings('pyQode', 'pyqode.core')
+        else:
+            self.settings = qsettings
+        self.sort_enabled = bool(self.settings.value(
             'sortOpenFilesAlphabetically', False))
         self.ui.checkBox.setChecked(self.sort_enabled)
         self.ui.checkBox.stateChanged.connect(self._on_sort_changed)
@@ -575,8 +643,7 @@ class OpenFilesPopup(QtWidgets.QDialog):
 
     def _on_sort_changed(self, *_):
         self.sort_enabled = self.ui.checkBox.isChecked()
-        settings = QtCore.QSettings('pyQode', 'pyqode.core')
-        settings.setValue(
+        self.settings.setValue(
             'sortOpenFilesAlphabetically', self.sort_enabled)
         self.set_filenames(self._filenames)
 
@@ -650,7 +717,8 @@ class SplittableTabWidget(QtWidgets.QSplitter):
             self._shortcut = value
             self._action_popup.setShortcut(self._shortcut)
 
-    def __init__(self, parent=None, root=True, create_popup=True):
+    def __init__(self, parent=None, root=True, create_popup=True,
+                 qsettings=None):
         super(SplittableTabWidget, self).__init__(parent)
         SplittableTabWidget.tab_widget_klass._detached_window_class = \
             SplittableTabWidget.detached_window_klass
@@ -661,7 +729,7 @@ class SplittableTabWidget(QtWidgets.QSplitter):
             self._action_popup.setShortcut(self._shortcut)
             self._action_popup.triggered.connect(self._show_popup)
             self.addAction(self._action_popup)
-            self.popup = OpenFilesPopup()
+            self.popup = OpenFilesPopup(qsettings=qsettings)
             self.popup.setWindowFlags(
                 QtCore.Qt.Popup | QtCore.Qt.FramelessWindowHint)
             self.popup.triggered.connect(self._on_popup_triggered)
@@ -713,7 +781,13 @@ class SplittableTabWidget(QtWidgets.QSplitter):
             self.main_tab_widget.indexOf(tab))
         self.main_tab_widget.show()
         tab._uuid = self._uuid
-        tab.horizontalScrollBar().setValue(0)
+        try:
+            scroll_bar = tab.horizontalScrollBar()
+        except AttributeError:
+            # not a QPlainTextEdit class
+            pass
+        else:
+            scroll_bar.setValue(0)
         tab.setFocus()
         tab._original_tab_widget = self
         self._tabs.append(tab)
@@ -770,6 +844,13 @@ class SplittableTabWidget(QtWidgets.QSplitter):
         :param orientation: orientation of the splitter
         :return: the new splitter
         """
+        if widget.original:
+            base = widget.original
+        else:
+            base = widget
+        clone = base.split()
+        if not clone:
+            return
         if orientation == int(QtCore.Qt.Horizontal):
             orientation = QtCore.Qt.Horizontal
         else:
@@ -779,11 +860,6 @@ class SplittableTabWidget(QtWidgets.QSplitter):
         splitter.show()
         self.addWidget(splitter)
         self.child_splitters.append(splitter)
-        if widget.original:
-            base = widget.original
-        else:
-            base = widget
-        clone = base.split()
         if clone not in base.clones:
             # code editors maintain the list of clones internally but some
             # other widgets (user widgets) might not.
@@ -945,16 +1021,17 @@ class CodeEditTabWidget(BaseTabWidget):
         Adds a star in front of a dirtt tab and emits dirty_changed.
         """
         widget = self.sender()
-        if isinstance(widget, CodeEdit):
-            parent = widget.parent_tab_widget
-            index = parent.indexOf(widget)
-            title = parent.tabText(index)
-            title = title.replace('* ', '')
-            if dirty:
-                parent.setTabText(index, "* " + title)
-            else:
-                parent.setTabText(index, title)
-            parent.dirty_changed.emit(dirty)
+        if isinstance(widget, DraggableTabBar):
+            return
+        parent = widget.parent_tab_widget
+        index = parent.indexOf(widget)
+        title = parent.tabText(index)
+        title = title.replace('* ', '')
+        if dirty:
+            parent.setTabText(index, "* " + title)
+        else:
+            parent.setTabText(index, title)
+        parent.dirty_changed.emit(dirty)
 
     @classmethod
     def _ask_path(cls, editor):
@@ -966,9 +1043,9 @@ class CodeEditTabWidget(BaseTabWidget):
         try:
             filter = cls.get_filter(editor.mimetypes[0])
         except IndexError:
-            filter = 'All files (*)'
+            filter = _('All files (*)')
         return QtWidgets.QFileDialog.getSaveFileName(
-            editor, 'Save file as', cls.default_directory, filter)
+            editor, _('Save file as'), cls.default_directory, filter)
 
     @classmethod
     def save_widget(cls, editor):
@@ -1018,7 +1095,8 @@ class DetachedEditorWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super(DetachedEditorWindow, self).__init__()
         tb = QtWidgets.QToolBar('File')
-        action = tb.addAction(QtGui.QIcon.fromTheme('document-save'), 'Save')
+        action = tb.addAction(QtGui.QIcon.fromTheme('document-save'),
+                              _('Save'))
         action.triggered.connect(self._save)
         action.setShortcut('Ctrl+S')
         self.addToolBar(tb)
@@ -1082,11 +1160,26 @@ class SplittableCodeEditTabWidget(SplittableTabWidget):
     #: Store the number of new documents created, for internal use.
     _new_count = 0
 
-    def __init__(self, parent=None, root=True):
+    CLOSED_TABS_HISTORY_LIMIT = 10
+
+    def __init__(self, parent=None, root=True, qsettings=None):
         SplittableTabWidget.detached_window_klass = DetachedEditorWindow
-        super(SplittableCodeEditTabWidget, self).__init__(parent, root)
+        super(SplittableCodeEditTabWidget, self).__init__(
+            parent, root, qsettings=qsettings)
         self.main_tab_widget.tabBar().double_clicked.connect(
             self.tab_bar_double_clicked.emit)
+        if root:
+            self.closed_tabs_history_btn = QtWidgets.QToolButton()
+            self.closed_tabs_history_btn.setAutoRaise(True)
+            self.closed_tabs_history_btn.setIcon(QtGui.QIcon.fromTheme(
+                'user-trash', QtGui.QIcon(':/pyqode-icons/rc/edit-trash.png')))
+            self.closed_tabs_history_btn.setPopupMode(
+                QtWidgets.QToolButton.InstantPopup)
+            self.closed_tabs_menu = QtWidgets.QMenu()
+            self.closed_tabs_history_btn.setMenu(self.closed_tabs_menu)
+            self.closed_tabs_history_btn.setDisabled(True)
+            self.main_tab_widget.setCornerWidget(self.closed_tabs_history_btn)
+            self.main_tab_widget.tab_closed.connect(self._on_tab_closed)
 
     @classmethod
     def register_code_edit(cls, code_edit_class):
@@ -1121,8 +1214,8 @@ class SplittableCodeEditTabWidget(SplittableTabWidget):
             success = self.main_tab_widget.save_widget(widget)
         except Exception as e:
             QtWidgets.QMessageBox.warning(
-                self, 'Failed to save file as',
-                'Failed to save file as %s\nError=%s' % (
+                self, _('Failed to save file as'),
+                _('Failed to save file as %s\nError=%s') % (
                     widget.file.path, str(e)))
             widget.file._path = mem
         else:
@@ -1154,20 +1247,23 @@ class SplittableCodeEditTabWidget(SplittableTabWidget):
             encoding = widget.file.encoding
         except AttributeError:
             # not a code edit
-            pass
+            old_content = ''
         else:
-            with open(path, encoding=encoding) as f:
-                old_content = f.read()
-            if widget.dirty:
-                try:
-                    self.main_tab_widget.save_widget(widget)
-                except Exception as e:
-                    QtWidgets.QMessageBox.warning(
-                        self, 'Failed to save file',
-                        'Failed to save file: %s\nError=%s' % (
-                            widget.file.path, str(e)))
-                else:
-                    self.document_saved.emit(path, old_content)
+            try:
+                with open(path, encoding=encoding) as f:
+                    old_content = f.read()
+            except OSError:
+                old_content = ''
+        if widget.dirty:
+            try:
+                self.main_tab_widget.save_widget(widget)
+            except Exception as e:
+                QtWidgets.QMessageBox.warning(
+                    self, 'Failed to save file',
+                    'Failed to save file: %s\nError=%s' % (
+                        widget.file.path, str(e)))
+            else:
+                self.document_saved.emit(path, old_content)
 
     def save_all(self):
         """
@@ -1323,6 +1419,7 @@ class SplittableCodeEditTabWidget(SplittableTabWidget):
             try:
                 tab.file.open(original_path, encoding=encoding)
             except Exception as e:
+                _logger().exception('exception while opening file')
                 tab.close()
                 tab.setParent(None)
                 tab.deleteLater()
@@ -1333,6 +1430,14 @@ class SplittableCodeEditTabWidget(SplittableTabWidget):
                 icon = self._icon(path)
                 self.add_tab(tab, title=name, icon=icon)
                 self.document_opened.emit(tab)
+
+                for action in self.closed_tabs_menu.actions():
+                    if action.toolTip() == original_path:
+                        self.closed_tabs_menu.removeAction(action)
+                        break
+                self.closed_tabs_history_btn.setEnabled(
+                    len(self.closed_tabs_menu.actions()) > 0)
+
                 return tab
 
     def close_document(self, path):
@@ -1428,5 +1533,61 @@ class SplittableCodeEditTabWidget(SplittableTabWidget):
     def split(self, widget, orientation):
         splitter = super(SplittableCodeEditTabWidget, self).split(
             widget, orientation)
-        splitter.tab_bar_double_clicked.connect(
-            self.tab_bar_double_clicked.emit)
+        if splitter:
+            splitter.tab_bar_double_clicked.connect(
+                self.tab_bar_double_clicked.emit)
+
+    def _on_tab_closed(self, tab):
+        try:
+            path = tab.file.path
+            open_params = tab.open_parameters
+        except AttributeError:
+            pass
+        else:
+            for i, action in enumerate(self.closed_tabs_menu.actions()):
+                if action.toolTip() == path:
+                    # already in menu, just move it at the top
+                    if i:
+                        before = self.closed_tabs_menu.actions()[0]
+                        self.closed_tabs_menu.removeAction(action)
+                        self.closed_tabs_menu.insertAction(before, action)
+                    break
+            else:
+                filename = QtCore.QFileInfo(path).fileName()
+                try:
+                    before = self.closed_tabs_menu.actions()[0]
+                except IndexError:
+                    action = self.closed_tabs_menu.addAction(
+                        self._icon(path), filename)
+                else:
+                    action = QtWidgets.QAction(self._icon(path), filename,
+                                               self.closed_tabs_menu)
+                    self.closed_tabs_menu.insertAction(before, action)
+                action.setToolTip(path)
+                action.triggered.connect(self._open_closed_path)
+                action.setData(open_params)
+                self.closed_tabs_history_btn.setEnabled(True)
+                nb_actions = len(self.closed_tabs_menu.actions())
+                while nb_actions > self.CLOSED_TABS_HISTORY_LIMIT:
+                    self.closed_tabs_menu.removeAction(
+                        self.closed_tabs_menu.actions()[-1])
+                    nb_actions = len(self.closed_tabs_menu.actions())
+
+    def _open_closed_path(self):
+        action = self.sender()
+        path = action.toolTip()
+        open_parameters = action.data()
+        self.open_document(
+            path, encoding=open_parameters['encoding'],
+            replace_tabs_by_spaces=open_parameters['replace_tabs_by_spaces'],
+            clean_trailing_whitespaces=open_parameters[
+                'clean_trailing_whitespaces'],
+            safe_save=open_parameters['safe_save'],
+            restore_cursor_position=open_parameters['restore_cursor_position'],
+            preferred_eol=open_parameters['preferred_eol'],
+            autodetect_eol=open_parameters['autodetect_eol'],
+            show_whitespaces=open_parameters['show_whitespaces'],
+            **open_parameters['kwargs'])
+        self.closed_tabs_menu.removeAction(action)
+        self.closed_tabs_history_btn.setEnabled(
+            len(self.closed_tabs_menu.actions()) > 0)

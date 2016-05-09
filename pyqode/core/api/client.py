@@ -248,6 +248,8 @@ class JsonTcpClient(QtNetwork.QTcpSocket):
 
     def _connect(self):
         """ Connects our client socket to the backend socket """
+        if self is None:
+            return
         comm('connecting to 127.0.0.1:%d', self._port)
         address = QtNetwork.QHostAddress('127.0.0.1')
         self.connectToHost(address, self._port)
@@ -317,7 +319,10 @@ class JsonTcpClient(QtNetwork.QTcpSocket):
             comm('decoding payload as json object')
             obj = json.loads(data)
             comm('response received: %r', obj)
-            results = obj['results']
+            try:
+                results = obj['results']
+            except (KeyError, TypeError):
+                results = None
             # possible callback
             if self._callback and self._callback():
                 self._callback()(results)
@@ -377,12 +382,13 @@ class BackendProcess(QtCore.QProcess):
 
     def _on_process_stdout_ready(self):
         """ Logs process output """
+        if not self:
+            return
         o = self.readAllStandardOutput()
         try:
             output = bytes(o).decode(self._encoding)
         except TypeError:
             output = bytes(o.data()).decode(self._encoding)
-        output = output[:output.rfind('\n')]
         for line in output.splitlines():
             self._srv_logger.log(1, line)
 
@@ -395,7 +401,6 @@ class BackendProcess(QtCore.QProcess):
             output = bytes(o).decode(self._encoding)
         except TypeError:
             output = bytes(o.data()).decode(self._encoding)
-        output = output[:output.rfind('\n')]
         for line in output.splitlines():
             self._srv_logger.error(line)
 
