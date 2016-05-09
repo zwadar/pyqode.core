@@ -421,6 +421,14 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
     def show_context_menu(self, value):
         self._show_ctx_mnu = value
 
+    @property
+    def select_line_on_copy_empty(self):
+        return self._select_line_on_copy_empty
+    
+    @select_line_on_copy_empty.setter
+    def select_line_on_copy_empty(self, value):
+        self._select_line_on_copy_empty = value
+
     def __init__(self, parent=None, create_default_actions=True):
         """
         :param parent: Parent widget
@@ -887,7 +895,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         self.setTextCursor(tc)
 
     def copy(self):
-        if not self.textCursor().hasSelection():
+        if self.select_line_on_copy_empty and not self.textCursor().hasSelection():
             TextHelper(self).select_whole_line()
         super(CodeEdit, self).copy()
 
