@@ -352,6 +352,7 @@ class BackendProcess(QtCore.QProcess):
         self._srv_logger = logging.getLogger('pyqode.backend')
         self._prevent_logs = False
         self._encoding = locale.getpreferredencoding()
+        self.setProcessChannelMode(QtCore.QProcess.ForwardedChannels)
 
     def _on_process_started(self):
         """ Logs process started """

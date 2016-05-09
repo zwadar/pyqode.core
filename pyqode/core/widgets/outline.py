@@ -9,7 +9,7 @@ from pyqode.core.panels import FoldingPanel
 from pyqode.core.modes.outline import OutlineMode
 from pyqode.qt import QtCore, QtGui, QtWidgets
 from pyqode.core.api import TextBlockHelper, TextBlockUserData, TextHelper
-
+import qtawesome as qta
 
 class OutlineTreeWidget(QtWidgets.QTreeWidget):
     """
@@ -198,7 +198,7 @@ class OutlineTreeWidget(QtWidgets.QTreeWidget):
                 icon = QtGui.QIcon.fromTheme(
                     name.icon[0], QtGui.QIcon(name.icon[1]))
             else:
-                icon = QtGui.QIcon(name.icon)
+                icon =  qta.icon(name.icon)
             ti.setIcon(0, icon)
             name.block = editor.document().findBlockByNumber(name.line)
             ti.setData(0, QtCore.Qt.UserRole, name)

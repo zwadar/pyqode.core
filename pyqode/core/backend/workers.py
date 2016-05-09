@@ -29,7 +29,6 @@ def echo_worker(data):
     :param data: Request data dict.
     :returns: True, data
     """
-    print('echo worker running')
     return data
 
 
@@ -66,7 +65,7 @@ class CodeCompletionWorker(object):
 
         """
 
-        def complete(self, code, line, column, path, encoding, prefix, abs_pos):
+        def complete(self, code, line, column, path, encoding, mime_type, prefix, abs_pos):
             """
             Returns a list of completions.
 
@@ -82,6 +81,7 @@ class CodeCompletionWorker(object):
             :param column: column number (0 based)
             :param path: file path
             :param encoding: file encoding
+            :param mime_type: file mime-type
             :param prefix: completion prefix (text before cursor)
             :param abs_pos: alternativelly this parameter grants acces to absolute cursor position (0 base)
 
@@ -103,11 +103,12 @@ class CodeCompletionWorker(object):
         prefix = data['prefix']
         req_id = data['request_id']
         abs_pos = data['abs_pos']
+        mime_type = data['mime_type']
         completions = []
         for prov in CodeCompletionWorker.providers:
             try:
                 results = prov.complete(
-                    code, line, column, path, encoding, prefix, abs_pos)
+                    code, line, column, path, encoding, mime_type, prefix, abs_pos)
                 completions.append(results)
                 if len(completions):
                     break

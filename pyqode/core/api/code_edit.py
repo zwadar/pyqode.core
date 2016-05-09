@@ -1,4 +1,4 @@
-"""
+﻿"""
 This module contains the base code editor widget.
 """
 from __future__ import print_function
@@ -154,6 +154,21 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
         self._save_on_focus_out = value
         for c in self.clones:
             c.save_on_focus_out = value
+
+    @property
+    def current_mime_type(self):
+        """
+        Sets current document mime type
+        """
+        return self._current_mime_type
+
+    @current_mime_type.setter
+    def current_mime_type(self, value):
+        self._current_mime_type = value
+        for c in self.clones:
+            c._current_mime_type = value
+
+
 
     @property
     def show_whitespaces(self):
@@ -434,6 +449,7 @@ class CodeEdit(QtWidgets.QPlainTextEdit):
             ']', '\\', '\n', '\t', '=', '-', ' '
         ]
         self._save_on_focus_out = False
+        self._current_mime_type = 'text/plain'
         self._use_spaces_instead_of_tabs = True
         self._whitespaces_foreground = None
         self._sel_background = None

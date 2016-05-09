@@ -498,9 +498,10 @@ class CodeCompletionMode(Mode, QtCore.QObject):
                 'column': column,
                 'path': self.editor.file.path,
                 'encoding': self.editor.file.encoding,
-                'prefix': self.completion_prefix,
-                'request_id': self._request_id,
-                'abs_pos' : self._helper.cursor_absolute_poition()
+                'prefix': self.completion_prefix,                
+				'request_id': self._request_id,
+                'abs_pos' : self._helper.cursor_absolute_poition(),
+                'mime_type' : self.editor.current_mime_type
             }
             try:
                 self.editor.backend.send_request(
@@ -581,9 +582,10 @@ class CodeCompletionMode(Mode, QtCore.QObject):
             if self.editor.isVisible():
                 if self._completer.widget() != self.editor:
                     self._completer.setWidget(self.editor)
-                self._completer.complete(self._get_popup_rect())
-                self._completer.popup().setCurrentIndex(
-                    self._completer.completionModel().index(index, 0))
+                self._completer.complete(self._get_popup_rect())                
+                if(self._completer.completionMode() != self._completer.UnfilteredPopupCompletion):
+                    self._completer.popup().setCurrentIndex(
+                       self._completer.completionModel().index(index, 0))
                 debug(
                     "popup shown: %r" % self._completer.popup().isVisible())
             else:

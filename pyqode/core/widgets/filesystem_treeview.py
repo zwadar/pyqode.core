@@ -213,13 +213,14 @@ class FileSystemTreeView(QtWidgets.QTreeView):
         self._fs_model_proxy.set_root_path(path)
         # takes parent of the root path, filter will keep only `path`, that
         # way `path` appear as the top level node of the tree
-        self._root_path = os.path.dirname(path)
+        self._root_path = os.path.dirname(os.path.normpath(path))
         self.root_path = path
         self._fs_model_source.directoryLoaded.connect(self._on_path_loaded)
         self._fs_model_source.setRootPath(self._root_path)
 
     def _on_path_loaded(self, path):
-        if os.path.normpath(path) != self._root_path:
+        test_path = str(os.path.normpath(path))
+        if test_path.lower() != self._root_path.lower():
             return
         self.setModel(self._fs_model_proxy)
         file_root_index = self._fs_model_source.setRootPath(self._root_path)

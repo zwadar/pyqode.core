@@ -971,12 +971,15 @@ class TextBlockHelper(object):
         """
         if block is None:
             return
-        state = block.userState()
-        if state == -1:
-            state = 0
-        state &= 0x7BFFFFFF
-        state |= int(val) << 26
-        block.setUserState(state)
+        try:
+            state = block.userState()
+            if state == -1:
+                state = 0
+            state &= 0xFBFFFFFF
+            state |= int(val) << 26
+            block.setUserState(state)    
+        except  :
+            return 
 
     @staticmethod
     def is_collapsed(block):
